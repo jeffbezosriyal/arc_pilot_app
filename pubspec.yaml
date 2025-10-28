@@ -1,0 +1,53 @@
+name: machine_dashboard
+description: "A robust and well-structured Flutter application for machine management and job handling."
+publish_to: 'none'
+
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.2.3 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  http: ^1.2.0
+  intl: ^0.19.0
+  cupertino_icons: ^1.0.8
+  flutter_bloc: ^8.1.5
+  equatable: ^2.0.5
+  qr_flutter: ^4.1.0
+  fl_chart: ^0.68.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+
+  # Testing dependencies
+  bloc_test: ^9.1.7   # For testing BLoCs
+  mocktail: ^1.0.3    # For creating mock objects (replaces mockito)
+  http: ^1.2.1        # Needed for service tests
+
+  fake_async: ^1.3.1
+  flutter_lints: ^3.0.0
+  # mockito: ^5.4.4 # Removed, as our tests use mocktail
+  build_runner: ^2.4.7
+
+flutter:
+  uses-material-design: true
+
+  # 1. The 'assets' section lists your images.
+  assets:
+    - assets/machine_icon.png
+    - assets/arcpilot_icon.png
+    - assets/cigweld_icon.png
+    - assets/weld_icon.png # Corrected typo here
+
+  # 2. The 'fonts' section must be added to declare your custom font.
+  #    Ensure this 'fonts:' line has the same indentation as 'assets:'.
+  fonts:
+    - family: Kallisto  # This is the name you will use in your Dart code.
+      fonts:
+        - asset: assets/fonts/kallisto_Thin.ttf # This MUST be the exact path and filename.
+        # If you had a bold version, you would add it here:
+        # - asset: assets/fonts/kallisto_Bold.ttf
+        #   weight: 700
