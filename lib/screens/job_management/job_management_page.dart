@@ -236,7 +236,6 @@ class _JobManagementPageState extends State<JobManagementPage> {
     if (activeFilters.isEmpty) {
       return const SizedBox.shrink();
     }
-
     return Padding(
       padding: const EdgeInsets.fromLTRB(16.0, 0, 16.0, 16.0),
       child: Wrap(

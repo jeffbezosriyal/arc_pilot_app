@@ -20,15 +20,22 @@ class ApiArcTimeService implements ArcTimeService {
   @override
   Future<ArcTimeMetric> fetchArcTime({
     required DateTime date,
+    // --- MODIFICATION: RE-ADDED 'range' ---
     required ArcTimeRange range,
+    // --- END MODIFICATION ---
   }) async {
+    // --- MODIFICATION: RESTORED 'rangeString' LOGIC ---
     // Convert range enum to string for API query parameter
     final String rangeString = describeEnum(range); // e.g., 'week', 'month', 'year'
+    // --- END MODIFICATION ---
+
     // Format date as YYYY-MM-DD
     final String dateString = DateFormat('yyyy-MM-dd').format(date);
 
+    // --- MODIFICATION: Updated URL to include 'range' query param ---
     // Build the URL with query parameters
     final uri = Uri.parse('$baseUrl/arctime?date=$dateString&range=$rangeString');
+    // --- END MODIFICATION ---
 
     debugPrint('Fetching ArcTime from: $uri'); // Log the URL
 

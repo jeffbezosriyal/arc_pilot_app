@@ -1,4 +1,5 @@
 import 'package:equatable/equatable.dart';
+import 'package:clock/clock.dart'; // <<< ADD THIS IMPORT
 
 /// Represents a single data point for the bar chart.
 class ArcTimeDataPoint extends Equatable {
@@ -39,7 +40,8 @@ class ArcTimeMetric extends Equatable {
   /// Creates a [ArcTimeMetric] from a JSON map.
   factory ArcTimeMetric.fromJson(Map<String, dynamic> json) {
     final int seconds = json['totalArcTimeInSeconds'] ?? 0;
-    final String dateString = json['lastUpdated'] ?? DateTime.now().toIso8601String();
+    // Use clock.now() for consistency if lastUpdated is null
+    final String dateString = json['lastUpdated'] ?? clock.now().toIso8601String();
 
     // Helper function to parse data points
     List<ArcTimeDataPoint> parseDataPoints(List<dynamic>? dataList) {
@@ -64,7 +66,8 @@ class ArcTimeMetric extends Equatable {
   }
 
   /// Creates a default/initial state for the metric.
-  factory ArcTimeMetric.initial() {
+  // --- PATCH: Added {Clock? injectedClock} ---
+  factory ArcTimeMetric.initial({Clock? injectedClock}) {
     // Helper to generate empty points
     List<ArcTimeDataPoint> generateInitialPoints(List<String> labels) {
       return labels.map((label) => ArcTimeDataPoint(label: label, value: 0.0)).toList();
@@ -72,12 +75,31 @@ class ArcTimeMetric extends Equatable {
 
     return ArcTimeMetric(
       totalArcTime: Duration.zero,
-      lastUpdated: DateTime.now(),
+      // --- PATCH: Use injected clock or global clock ---
+      lastUpdated: (injectedClock ?? clock).now(),
       weeklyData: generateInitialPoints(['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']),
       monthlyData: generateInitialPoints(List.generate(31, (i) => (i + 1).toString().padLeft(2, '0'))), // Days 01-31
       yearlyData: generateInitialPoints(['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']),
     );
   }
+
+  // Helper method for testing
+  ArcTimeMetric copyWith({
+    Duration? totalArcTime,
+    DateTime? lastUpdated,
+    List<ArcTimeDataPoint>? weeklyData,
+    List<ArcTimeDataPoint>? monthlyData,
+    List<ArcTimeDataPoint>? yearlyData,
+  }) {
+    return ArcTimeMetric(
+      totalArcTime: totalArcTime ?? this.totalArcTime,
+      lastUpdated: lastUpdated ?? this.lastUpdated,
+      weeklyData: weeklyData ?? this.weeklyData,
+      monthlyData: monthlyData ?? this.monthlyData,
+      yearlyData: yearlyData ?? this.yearlyData,
+    );
+  }
+
 
   @override
   List<Object> get props => [
@@ -88,4 +110,3 @@ class ArcTimeMetric extends Equatable {
     yearlyData
   ];
 }
-

@@ -48,157 +48,174 @@ class WeeklyBarChart extends StatelessWidget {
       yInterval = 4;
     }
 
-    return Padding(
-      padding: const EdgeInsets.only(top: 10.0), // headroom for top label
-      child: BarChart(
-        BarChartData(
-          minY: minY,
-          maxY: maxY,
-          backgroundColor: Colors.transparent,
-          borderData: FlBorderData(
-            show: true,
-            border: Border(
-              bottom: BorderSide(color: Colors.grey.shade900, width: 1.5),
-              top: const BorderSide(color: Colors.transparent, width: 1.5),
-              left: const BorderSide(color: Colors.transparent),
-              right: const BorderSide(color: Colors.transparent),
-            ),
-          ),
-          gridData: FlGridData(
-            show: true,
-            drawVerticalLine: false,
-            horizontalInterval: yInterval,
-            getDrawingHorizontalLine: (value) {
-              if (value >= maxY) return const FlLine(color: Colors.transparent);
-              if (value == 0) return FlLine(color: Colors.grey.shade900, strokeWidth: 1.5);
-              return FlLine(color: Colors.grey.withOpacity(0.2), strokeWidth: 1);
-            },
-          ),
-          titlesData: FlTitlesData(
-            show: true,
-            topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-            rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-            bottomTitles: AxisTitles(
-              sideTitles: SideTitles(
-                showTitles: true,
-                reservedSize: 30,
-                interval: 1,
-                getTitlesWidget: (double value, TitleMeta meta) {
-                  final index = value.toInt();
-                  if (index < 0 || index >= dataPoints.length) return const SizedBox();
-                  final String label = dataPoints[index].label;
-                  return Padding(
-                    padding: const EdgeInsets.only(top: 8.0),
-                    child: Text(
-                      label,
-                      style: const TextStyle(color: Colors.white70, fontSize: 12),
-                      overflow: TextOverflow.visible,
-                    ),
-                  );
+    // --- ADD THIS WRAPPER ---
+    // This builder animates the bar heights from 0.0 to 1.0 on load
+    // by interpolating the 'toY' value for each bar.
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: 0.0, end: 1.0),
+      duration: const Duration(milliseconds: 450),
+      curve: Curves.easeOutCubic,
+      builder: (context, progress, child) {
+        // --- END OF ADD ---
+
+        return Padding(
+          padding: const EdgeInsets.only(top: 10.0), // headroom for top label
+          child: BarChart(
+            BarChartData(
+              minY: minY,
+              maxY: maxY,
+              backgroundColor: Colors.transparent,
+              borderData: FlBorderData(
+                show: true,
+                border: Border(
+                  bottom: BorderSide(color: Colors.grey.shade900, width: 1.5),
+                  top: const BorderSide(color: Colors.transparent, width: 1.5),
+                  left: const BorderSide(color: Colors.transparent),
+                  right: const BorderSide(color: Colors.transparent),
+                ),
+              ),
+              gridData: FlGridData(
+                show: true,
+                drawVerticalLine: false,
+                horizontalInterval: yInterval,
+                getDrawingHorizontalLine: (value) {
+                  if (value >= maxY) return const FlLine(color: Colors.transparent);
+                  if (value == 0) return FlLine(color: Colors.grey.shade900, strokeWidth: 1.5);
+                  return FlLine(color: Colors.grey.withOpacity(0.2), strokeWidth: 1);
                 },
               ),
-            ),
-            leftTitles: AxisTitles(
-              sideTitles: SideTitles(
-                showTitles: true,
-                reservedSize: 45,
-                interval: yInterval,
-                getTitlesWidget: (double value, TitleMeta meta) {
-                  if (value >= meta.max) return const SizedBox();
-                  if (timeRange != ArcTimeRange.year && value == 0) return const SizedBox();
-
-                  // top label visible with bottom padding
-                  if (value == meta.max) {
-                    return Padding(
-                      padding: const EdgeInsets.only(bottom: 4.0),
-                      child: Text(
-                        '${value.toInt()}h',
-                        style: const TextStyle(color: Colors.white70, fontSize: 12),
-                      ),
-                    );
-                  }
-
-                  String label;
-                  if (value >= 1000) {
-                    label = '${(value / 1000).toStringAsFixed(1)}k';
-                  } else {
-                    label = '${value.toInt()}h';
-                  }
-
-                  return Text(label, style: const TextStyle(color: Colors.white70, fontSize: 12));
-                },
-              ),
-            ),
-          ),
-          barTouchData: BarTouchData(
-            // --- ADDED THIS SECTION FOR STYLED TOOLTIPS ---
-            touchTooltipData: BarTouchTooltipData(
-              // tooltipBackgroundColor: Colors.black,
-              tooltipBorder: const BorderSide(color: Colors.blue, width: 1),
-              tooltipRoundedRadius: 4,
-              getTooltipItem: (group, groupIndex, rod, rodIndex) {
-                final int dataIndex = group.x.toInt();
-                if (dataIndex < 0 || dataIndex >= dataPoints.length) {
-                  return null;
-                }
-
-                final dataPoint = dataPoints[dataIndex];
-                final double value = rod.toY;
-
-                // Format as "20hrs, 29mins"
-                final int totalMinutes = (value * 60).round();
-                final int hoursPart = totalMinutes ~/ 60;
-                final int minutesPart = totalMinutes % 60;
-                final String timeString =
-                    '${hoursPart}hrs, ${minutesPart}mins';
-
-                // Get the label from the data (e.g., "Tue", "02", "mar")
-                String labelString = dataPoint.label;
-
-                // --- ADDED THIS LOGIC ---
-                // If it's the week view, calculate the specific date
-                if (timeRange == ArcTimeRange.week) {
-                  final now = DateTime.now();
-                  // Calculate the start of the week (assuming Sunday is index 0)
-                  // dataPoint.label "Sun" corresponds to index 0
-                  final daysToSubtract = now.weekday % 7; // Sunday=0, Monday=1...
-                  final startOfWeek = now.subtract(Duration(days: daysToSubtract));
-
-                  // Get the date for the tapped bar
-                  final dateForBar = startOfWeek.add(Duration(days: dataIndex));
-
-                  // Format as "EEE, d MMM" (e.g., "Tue, 11 Feb")
-                  labelString = DateFormat('EEE, d MMM').format(dateForBar);
-                }
-                // --- END OF ADDED LOGIC ---
-
-                return BarTooltipItem(
-                  '$timeString\n',
-                  const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 14,
+              titlesData: FlTitlesData(
+                show: true,
+                topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                bottomTitles: AxisTitles(
+                  sideTitles: SideTitles(
+                    showTitles: true,
+                    reservedSize: 30,
+                    interval: 1,
+                    getTitlesWidget: (double value, TitleMeta meta) {
+                      final index = value.toInt();
+                      if (index < 0 || index >= dataPoints.length) return const SizedBox();
+                      final String label = dataPoints[index].label;
+                      return Padding(
+                        padding: const EdgeInsets.only(top: 8.0),
+                        child: Text(
+                          label,
+                          style: const TextStyle(color: Colors.white70, fontSize: 12),
+                          overflow: TextOverflow.visible,
+                        ),
+                      );
+                    },
                   ),
-                  children: <TextSpan>[
-                    TextSpan(
-                      text: labelString, // Use the dynamically set labelString
-                      style: TextStyle(
-                        color: Colors.grey[400],
-                        fontSize: 12,
-                        fontWeight: FontWeight.w500,
+                ),
+                leftTitles: AxisTitles(
+                  sideTitles: SideTitles(
+                    showTitles: true,
+                    reservedSize: 45,
+                    interval: yInterval,
+                    getTitlesWidget: (double value, TitleMeta meta) {
+                      if (value >= meta.max) return const SizedBox();
+                      if (timeRange != ArcTimeRange.year && value == 0) return const SizedBox();
+
+                      // top label visible with bottom padding
+                      if (value == meta.max) {
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 4.0),
+                          child: Text(
+                            '${value.toInt()}h',
+                            style: const TextStyle(color: Colors.white70, fontSize: 12),
+                          ),
+                        );
+                      }
+
+                      String label;
+                      if (value >= 1000) {
+                        label = '${(value / 1000).toStringAsFixed(1)}k';
+                      } else {
+                        label = '${value.toInt()}h';
+                      }
+
+                      return Text(label, style: const TextStyle(color: Colors.white70, fontSize: 12));
+                    },
+                  ),
+                ),
+              ),
+              barTouchData: BarTouchData(
+                // --- ADDED THIS SECTION FOR STYLED TOOLTIPS ---
+                touchTooltipData: BarTouchTooltipData(
+                  // tooltipBackgroundColor: Colors.black,
+                  tooltipBorder: const BorderSide(color: Colors.blue, width: 1),
+                  tooltipRoundedRadius: 4,
+                  getTooltipItem: (group, groupIndex, rod, rodIndex) {
+                    final int dataIndex = group.x.toInt();
+                    if (dataIndex < 0 || dataIndex >= dataPoints.length) {
+                      return null;
+                    }
+
+                    final dataPoint = dataPoints[dataIndex];
+                    // --- MODIFICATION: Read the original, non-animated value ---
+                    final double value = dataPoint.value;
+                    // --- END OF MODIFICATION ---
+
+                    // Format as "20hrs, 29mins"
+                    final int totalMinutes = (value * 60).round();
+                    final int hoursPart = totalMinutes ~/ 60;
+                    final int minutesPart = totalMinutes % 60;
+                    final String timeString =
+                        '${hoursPart}hrs, ${minutesPart}mins';
+
+                    // Get the label from the data (e.g., "Tue", "02", "mar")
+                    String labelString = dataPoint.label;
+
+                    // --- ADDED THIS LOGIC ---
+                    // If it's the week view, calculate the specific date
+                    if (timeRange == ArcTimeRange.week) {
+                      final now = DateTime.now();
+                      // Calculate the start of the week (assuming Sunday is index 0)
+                      // dataPoint.label "Sun" corresponds to index 0
+                      final daysToSubtract = now.weekday % 7; // Sunday=0, Monday=1...
+                      final startOfWeek = now.subtract(Duration(days: daysToSubtract));
+
+                      // Get the date for the tapped bar
+                      final dateForBar = startOfWeek.add(Duration(days: dataIndex));
+
+                      // Format as "EEE, d MMM" (e.g., "Tue, 11 Feb")
+                      labelString = DateFormat('EEE, d MMM').format(dateForBar);
+                    }
+                    // --- END OF ADDED LOGIC ---
+
+                    return BarTooltipItem(
+                      '$timeString\n',
+                      const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 14,
                       ),
-                    ),
-                  ],
-                );
-              },
+                      children: <TextSpan>[
+                        TextSpan(
+                          text: labelString, // Use the dynamically set labelString
+                          style: TextStyle(
+                            color: Colors.grey[400],
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    );
+                  },
+                ),
+                // --- END OF ADDED SECTION ---
+                touchCallback: (FlTouchEvent event, BarTouchResponse? response) {},
+              ),
+              // Pass the animated progress to the bar builder
+              barGroups: _buildBarGroups(progress),
             ),
-            // --- END OF ADDED SECTION ---
-            touchCallback: (FlTouchEvent event, BarTouchResponse? response) {},
           ),
-          barGroups: _buildBarGroups(),
-        ),
-      ),
+        );
+        // --- ADD THIS ---
+      },
     );
+    // --- END OF ADD ---
   }
 
   double _getBarWidth() {
@@ -214,7 +231,8 @@ class WeeklyBarChart extends StatelessWidget {
     }
   }
 
-  List<BarChartGroupData> _buildBarGroups() {
+  // --- MODIFICATION: Accept the 'progress' value ---
+  List<BarChartGroupData> _buildBarGroups([double progress = 1.0]) {
     double barWidth = _getBarWidth();
 
     return List.generate(dataPoints.length, (index) {
@@ -228,7 +246,9 @@ class WeeklyBarChart extends StatelessWidget {
         x: index,
         barRods: [
           BarChartRodData(
-            toY: barValue,
+            // --- MODIFICATION: Apply the animation progress to the bar height ---
+            toY: barValue * progress,
+            // --- END OF MODIFICATION ---
             color: Colors.blueAccent,
             width: barWidth,
             borderRadius: BorderRadius.zero,

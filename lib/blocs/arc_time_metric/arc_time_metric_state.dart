@@ -1,5 +1,7 @@
 part of 'arc_time_metric_bloc.dart'; // Keep this directive
 
+// <<< IMPORT REMOVED FROM HERE ---
+
 // Enum to represent the status of the data fetching
 enum ArcTimeStatus { initial, loading, success, failure }
 
@@ -8,24 +10,27 @@ class ArcTimeMetricState extends Equatable {
   final ArcTimeMetric metric;
   final String? errorMessage;
   final ArcTimeRange selectedRange; // Stores the current range
-  final DateTime referenceDate; // <-- ADDED: Date to base navigation on
+  final DateTime referenceDate;
 
   const ArcTimeMetricState({
     this.status = ArcTimeStatus.initial,
     required this.metric,
     this.errorMessage,
-    this.selectedRange = ArcTimeRange.week, // Default to week
-    required this.referenceDate, // <-- ADDED
+    this.selectedRange = ArcTimeRange.week,
+    required this.referenceDate,
   });
 
   // Factory constructor for the initial state
-  factory ArcTimeMetricState.initial() {
+  factory ArcTimeMetricState.initial({Clock? injectedClock}) {
+    final clk = injectedClock ?? clock; // Use injected or global clock
     return ArcTimeMetricState(
       status: ArcTimeStatus.initial,
-      metric: ArcTimeMetric.initial(),
+      // Pass clock down to metric
+      metric: ArcTimeMetric.initial(injectedClock: clk),
       errorMessage: null,
-      selectedRange: ArcTimeRange.week, // Set initial range
-      referenceDate: DateTime.now(), // <-- ADDED: Initialize with current date
+      selectedRange: ArcTimeRange.week,
+      // Use clock for referenceDate
+      referenceDate: clk.now(),
     );
   }
 
@@ -34,21 +39,19 @@ class ArcTimeMetricState extends Equatable {
     ArcTimeMetric? metric,
     String? errorMessage,
     ArcTimeRange? selectedRange,
-    DateTime? referenceDate, // <-- ADDED
+    DateTime? referenceDate,
   }) {
     return ArcTimeMetricState(
       status: status ?? this.status,
       metric: metric ?? this.metric,
-      // Clear error message on success or loading, keep on failure if no new message
       errorMessage: (status == ArcTimeStatus.success || status == ArcTimeStatus.loading)
           ? null
           : errorMessage ?? this.errorMessage,
       selectedRange: selectedRange ?? this.selectedRange,
-      referenceDate: referenceDate ?? this.referenceDate, // <-- ADDED
+      referenceDate: referenceDate ?? this.referenceDate,
     );
   }
 
   @override
-  // FIX: Ensure referenceDate is included for proper state comparison
-  List<Object?> get props => [status, metric, errorMessage, selectedRange, referenceDate]; // <-- UPDATED
+  List<Object?> get props => [status, metric, errorMessage, selectedRange, referenceDate];
 }

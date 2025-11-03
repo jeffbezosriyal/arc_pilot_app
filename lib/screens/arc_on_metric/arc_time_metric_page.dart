@@ -114,7 +114,7 @@ class ArcTimeMetricPage extends StatelessWidget {
 
     switch (selectedRange) {
       case ArcTimeRange.week:
-        // Format: "week 09/02 - 15/02/2025" using referenceDate
+      // Format: "week 09/02 - 15/02/2025" using referenceDate
         final startOfWeek = referenceDate.subtract(Duration(days: referenceDate.weekday - 1));
         final endOfWeek = startOfWeek.add(const Duration(days: 6));
         dynamicDateRangeLabel =
@@ -122,12 +122,12 @@ class ArcTimeMetricPage extends StatelessWidget {
         averageLabel = 'This week Avg';
         break;
       case ArcTimeRange.month:
-        // Format: "March 2024" using referenceDate
+      // Format: "March 2024" using referenceDate
         dynamicDateRangeLabel = DateFormat('MMMM yyyy').format(referenceDate);
         averageLabel = 'Daily Avg';
         break;
       case ArcTimeRange.year:
-        // Format: "2024" using referenceDate
+      // Format: "2024" using referenceDate
         dynamicDateRangeLabel = DateFormat('yyyy').format(referenceDate);
         averageLabel = 'Monthly Avg';
         break;
@@ -229,7 +229,7 @@ class ArcTimeMetricPage extends StatelessWidget {
                   fontWeight: FontWeight.bold,
                 ),
               ),
-              // Welder Icon [Image of a welder icon]
+              // Welder Icon
               Image.asset(
                 'assets/weld_icon.png', // Assuming this is the welder icon path
                 width: 70,
@@ -355,11 +355,32 @@ class ArcTimeMetricPage extends StatelessWidget {
             decoration: const BoxDecoration(),
             child: Stack( // Use Stack to overlay loading indicator
               children: [
-                chartDisplayWidget, // The actual chart or "No data" text
-                // Show a loading overlay *during* background refresh
+                // AnimatedSwitcher handles the morph
+                AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 400),
+                  switchInCurve: Curves.easeInOutCubic,
+                  switchOutCurve: Curves.easeInOutCubic,
+                  transitionBuilder: (Widget child, Animation<double> animation) {
+                    final scaleTween = Tween<double>(begin: 0.95, end: 1.0);
+                    final scaleAnimation = scaleTween.animate(animation);
+
+                    return FadeTransition(
+                      opacity: animation,
+                      child: ScaleTransition(
+                        scale: scaleAnimation,
+                        child: child,
+                      ),
+                    );
+                  },
+                  child: KeyedSubtree(
+                    key: ValueKey<String>('$selectedRange-$dynamicDateRangeLabel'),
+                    child: chartDisplayWidget,
+                  ),
+                ),
+                // Loading overlay
                 if (state.status == ArcTimeStatus.loading && state.metric.totalArcTime != Duration.zero)
                   Container(
-                    color: Colors.black.withOpacity(0.5), // Semi-transparent overlay
+                    color: Colors.black.withOpacity(0.5),
                     child: const Center(child: CircularProgressIndicator()),
                   ),
               ],

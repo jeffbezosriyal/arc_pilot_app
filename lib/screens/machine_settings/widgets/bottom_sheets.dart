@@ -144,7 +144,7 @@ class RemoveMachineConfirmationSheet extends StatelessWidget {
           ),
           const SizedBox(height: 16.0),
           Text(
-            'Are you sure you want to remove this machine\nfrom your dashboard?\nThis action cannot be undone.',
+            'Are you sure you want to remove this machine from your dashboard?\nThis action cannot be undone.',
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Colors.white, height: 1.5),
           ),
           const Spacer(),

@@ -6,6 +6,8 @@ abstract class ArcTimeService {
   /// Fetches arc time data based on a reference date and a time range.
   Future<ArcTimeMetric> fetchArcTime({
     required DateTime date,
+    // --- MODIFICATION: RE-ADDED 'range' ---
     required ArcTimeRange range,
+    // --- END MODIFICATION ---
   });
 }

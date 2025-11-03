@@ -1,9 +1,10 @@
+import 'package:equatable/equatable.dart';
 
 /// Represents a job with various machine settings.
 ///
 /// This model is designed to be robust, handling potentially null or missing
 /// data from an API response and correctly formatting data for API submission.
-class Job {
+class Job extends Equatable {
   /// The unique identifier for the job. It is nullable because when creating a
   /// new job, the ID is assigned by the server, not the client.
   final String? id;
@@ -88,6 +89,28 @@ class Job {
       'isActive': isActive,
     };
   }
+
+  @override
+  List<Object?> get props => [
+    id,
+    title,
+    mode,
+    current,
+    hotStartTime,
+    wave,
+    base,
+    pulse,
+    duty,
+    wire,
+    shieldingGas,
+    arcLength,
+    diameter,
+    inductance,
+    isActive,
+  ];
+
+  @override
+  bool get stringify => true;
 }
 
 /// A private helper to safely convert any value to a String.

@@ -41,6 +41,7 @@ class SettingsState extends Equatable {
     machineName,
     beeperEnabled,
     unitIsMM,
-    // currentTime, // <-- EXCLUDED
+    currentTime, // <-- INCLUDE THIS
   ];
 }
+

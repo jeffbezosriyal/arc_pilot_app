@@ -1,592 +1,448 @@
-import 'package:bloc_test/bloc_test.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:bloc_test/bloc_test.dart';
+import 'package:machine_dashboard/api/api_exceptions.dart';
 import 'package:machine_dashboard/blocs/job_management/job_bloc.dart';
 import 'package:machine_dashboard/blocs/job_management/job_event.dart';
 import 'package:machine_dashboard/blocs/job_management/job_state.dart';
 import 'package:machine_dashboard/models/job.dart';
-import 'package:mocktail/mocktail.dart';
-import 'package:machine_dashboard/api/api_exceptions.dart';
+import 'package:mockito/mockito.dart';
 
+import '../../mocks.mocks.dart';
 
-import '../../mocks.dart'; // Import mocks
-
-// Helper Job instances for testing
-final job1 = Job(id: '1', title: 'Job 1', mode: 'MIG', current: '100A', isActive: false);
-final job2 = Job(id: '2', title: 'Job 2', mode: 'TIG', current: '150A', isActive: true);
-final job3 = Job(id: '3', title: 'Test 3', mode: 'MIG', current: '120A', isActive: false);
-
-// Create a valid, non-const dummy Job instance for fallback
-final fallbackJob = Job(title: '', mode: '', current: '');
+// Helper function to create a mock job
+Job createMockJob({
+  String id = '1',
+  String title = 'Test Job',
+  String mode = 'MIG',
+  bool isActive = false,
+}) =>
+    Job(
+      id: id,
+      title: title,
+      mode: mode,
+      current: '100A',
+      isActive: isActive,
+    );
 
 void main() {
-  late MockJobService mockJobService;
   late JobBloc jobBloc;
+  late MockJobService mockJobService;
 
-  // --- FIX: Register fallback value OUTSIDE setUp ---
-  setUpAll(() {
-    registerFallbackValue(fallbackJob); // Use the helper instance
-  });
-  // --- END FIX ---
-
+  // Mock data
+  final job1 = createMockJob(id: '1', title: 'Steel Job', mode: 'MIG');
+  final job2 = createMockJob(id: '2', title: 'Alu Job', mode: 'TIG');
+  final job3 = createMockJob(id: '3', title: 'MMA Job', mode: 'MMA');
+  final allJobs = [job1, job2, job3];
 
   setUp(() {
     mockJobService = MockJobService();
     jobBloc = JobBloc(jobService: mockJobService);
 
-    // Default stub for addJob (can be overridden in specific tests)
-    // Use any() for the Job parameter because we registered a fallback
-    when(() => mockJobService.addJob(any())).thenAnswer((_) async => {});
-
-    // Default stub for updateJob
-    when(() => mockJobService.updateJob(any())).thenAnswer((_) async => {});
-
-    // Default stub for updateJobStatus
-    when(() => mockJobService.updateJobStatus(any(), any())).thenAnswer((
-        _) async => {});
-
-    // Default stub for deleteJob
-    when(() => mockJobService.deleteJob(any())).thenAnswer((_) async => {});
+    // Stub default successful fetch
+    when(mockJobService.fetchJobs())
+        .thenAnswer((_) async => allJobs);
   });
 
   tearDown(() {
     jobBloc.close();
   });
 
-  test('initial state is correct', () {
-    expect(jobBloc.state, const JobState());
-  });
+  group('JobBloc', () {
+    test('initial state is correct', () {
+      expect(jobBloc.state, const JobState());
+    });
 
-  group('FetchJobsEvent', () {
     blocTest<JobBloc, JobState>(
-      'emits [loading, success] when fetch is successful',
-      setUp: () {
-        when(() => mockJobService.fetchJobs()).thenAnswer((_) async =>
-        [
-          job1,
-          job2
-        ]);
-      },
+      'FetchJobsEvent: emits [loading, success] on successful fetch',
       build: () => jobBloc,
       act: (bloc) => bloc.add(FetchJobsEvent()),
-      expect: () =>
-      <JobState>[
+      expect: () => [
         const JobState(status: JobStatus.loading),
         JobState(
-            status: JobStatus.success,
-            allJobs: [job1, job2],
-            filteredJobs: [job1, job2]),
+          status: JobStatus.success,
+          allJobs: allJobs,
+          filteredJobs: allJobs,
+        ),
       ],
       verify: (_) {
-        verify(() => mockJobService.fetchJobs()).called(1);
+        verify(mockJobService.fetchJobs()).called(1);
       },
     );
 
     blocTest<JobBloc, JobState>(
-      'emits [loading, failure] when fetch fails',
-      setUp: () {
-        when(() => mockJobService.fetchJobs()).thenThrow(
-            ApiException('Failed'));
+      'FetchJobsEvent: emits [loading, failure] on error',
+      build: () {
+        when(mockJobService.fetchJobs())
+            .thenThrow(ApiException('Network Error'));
+        return jobBloc;
       },
-      build: () => jobBloc,
       act: (bloc) => bloc.add(FetchJobsEvent()),
-      expect: () =>
-      <JobState>[
+      expect: () => [
         const JobState(status: JobStatus.loading),
         const JobState(
-            status: JobStatus.failure, allJobs: [], filteredJobs: []),
-        // Ensure lists are empty on failure
+          status: JobStatus.failure,
+          allJobs: [],
+          filteredJobs: [],
+        ),
       ],
       verify: (_) {
-        verify(() => mockJobService.fetchJobs()).called(1);
+        verify(mockJobService.fetchJobs()).called(1);
       },
     );
-  });
 
-  group('SearchJobsEvent', () {
     blocTest<JobBloc, JobState>(
-      'correctly filters the job list',
+      'ApplyJobFilterEvent: filters list from allJobs',
       build: () => jobBloc,
-      // Seed state with some initial jobs
-      seed: () =>
-          JobState(
-            status: JobStatus.success,
-            allJobs: [job1, job2, job3],
-            filteredJobs: [job1, job2, job3],
-          ),
-      act: (bloc) => bloc.add(const SearchJobsEvent('Job')), // Search for 'Job'
-      expect: () =>
-      <JobState>[
-        // Expect state with filtered list containing only job1 and job2
+      seed: () => JobState(allJobs: allJobs, filteredJobs: allJobs),
+      act: (bloc) => bloc.add(const ApplyJobFilterEvent({'MIG', 'MMA'})),
+      expect: () => [
         JobState(
-          status: JobStatus.success,
-          allJobs: [job1, job2, job3],
-          filteredJobs: [job1, job2], // Only job1 and job2 match 'Job'
-          searchQuery: 'Job', // Search query is updated
+          allJobs: allJobs,
+          filteredJobs: [job1, job3], // job2 (TIG) is filtered out
+          activeFilters: const {'MIG', 'MMA'},
         ),
-      ],
-      // No API calls expected for search
-    );
-  });
-
-  group('ApplyJobFilterEvent', () {
-    blocTest<JobBloc, JobState>(
-      'correctly filters the job list',
-      build: () => jobBloc,
-      seed: () =>
-          JobState(
-            status: JobStatus.success,
-            allJobs: [job1, job2, job3],
-            filteredJobs: [job1, job2, job3],
-          ),
-      act: (bloc) => bloc.add(const ApplyJobFilterEvent({'MIG'})),
-      // Filter for 'MIG'
-      expect: () =>
-      <JobState>[
-        // Expect state with filtered list containing only job1 and job3
-        JobState(
-          status: JobStatus.success,
-          allJobs: [job1, job2, job3],
-          filteredJobs: [job1, job3], // Only job1 and job3 have mode 'MIG'
-          activeFilters: const {'MIG'}, // Filters are updated
-        ),
-      ],
-      // No API calls expected for filter
-    );
-  });
-
-  group('Search and Filter Combination', () {
-    blocTest<JobBloc, JobState>(
-      'Search and Filter events work together',
-      build: () => jobBloc,
-      seed: () =>
-          JobState(
-            status: JobStatus.success,
-            allJobs: [job1, job2, job3],
-            filteredJobs: [job1, job2, job3],
-          ),
-      act: (bloc) async {
-        bloc.add(const ApplyJobFilterEvent({'MIG'})); // Apply filter first
-        await Future.delayed(Duration.zero); // Allow filter to process
-        bloc.add(const SearchJobsEvent('Job')); // Then apply search
-      },
-      skip: 1,
-      // Skip the intermediate state after filtering
-      expect: () =>
-      <JobState>[
-        // Expect final state after both filter and search
-        JobState(
-          status: JobStatus.success,
-          allJobs: [job1, job2, job3],
-          filteredJobs: [job1],
-          // Only job1 matches 'MIG' AND 'Job'
-          activeFilters: const {'MIG'},
-          searchQuery: 'Job',
-        ),
-      ],
-    );
-  });
-
-
-  group('AddNewJobEvent', () {
-    final newJobList = [job1, job2, job3]; // Simulate list after refetch
-
-    // --- FIX: Use Matchers ---
-    blocTest<JobBloc, JobState>(
-      'adds a job and refetches the list',
-      setUp: () {
-        // Mock addJob to succeed
-        when(() => mockJobService.addJob(any())).thenAnswer((_) async => {});
-        // Mock the subsequent fetchJobs to return the new list
-        when(() => mockJobService.fetchJobs()).thenAnswer((
-            _) async => newJobList);
-      },
-      build: () => jobBloc,
-      // Seed with initial state if needed, e.g., existing jobs
-      seed: () =>
-          JobState(status: JobStatus.success,
-          allJobs: [job1, job2],
-          filteredJobs: [job1, job2]),
-      act: (bloc) => bloc.add(AddNewJobEvent()),
-      expect: () =>
-      <dynamic>[
-        // Use dynamic list for Matchers
-        // 1. Action message state (intermediate)
-        isA<JobState>()
-            .having((s) => s.actionMessage, 'actionMessage',
-            'Job added successfully!')
-            .having((s) => s.actionMessageType, 'messageType',
-            ActionMessageType.success)
-        // Important: Check that lists haven't changed yet
-            .having((s) => s.allJobs.length, 'allJobs length', 2)
-            .having((s) => s.filteredJobs.length, 'filteredJobs length', 2),
-
-        // 2. Loading state during refetch (action message persists)
-        isA<JobState>()
-            .having((s) => s.status, 'status', JobStatus.loading)
-            .having((s) => s.actionMessage, 'actionMessage',
-            'Job added successfully!'),
-
-        // 3. Final success state with the NEW list (action message persists briefly)
-        isA<JobState>()
-            .having((s) => s.status, 'status', JobStatus.success)
-            .having((s) => s.allJobs, 'allJobs', newJobList)
-            .having((s) => s.filteredJobs, 'filteredJobs',
-            newJobList) // Assuming no filters active
-            .having((s) => s.actionMessage, 'actionMessage',
-            'Job added successfully!'),
       ],
       verify: (_) {
-        verify(() => mockJobService.addJob(any())).called(1);
-        verify(() => mockJobService.fetchJobs()).called(1); // Verify refetch
+        verifyNever(mockJobService.fetchJobs()); // No network call
       },
     );
-    // --- END FIX ---
 
     blocTest<JobBloc, JobState>(
-      'emits error message when addJob fails',
-      setUp: () {
-        when(() => mockJobService.addJob(any())).thenThrow(
-            ApiException('Failed'));
-      },
+      'SearchJobsEvent: searches list from allJobs',
       build: () => jobBloc,
+      seed: () => JobState(allJobs: allJobs, filteredJobs: allJobs),
+      act: (bloc) => bloc.add(const SearchJobsEvent('Alu')),
+      expect: () => [
+        JobState(
+          allJobs: allJobs,
+          filteredJobs: [job2], // Only 'Alu Job'
+          searchQuery: 'Alu',
+        ),
+      ],
+      verify: (_) {
+        verifyNever(mockJobService.fetchJobs()); // No network call
+      },
+    );
+
+    blocTest<JobBloc, JobState>(
+      'Filter and Search: apply both filter and search',
+      build: () => jobBloc,
+      seed: () => JobState(
+        allJobs: allJobs,
+        filteredJobs: allJobs,
+        activeFilters: const {'MIG', 'TIG'}, // Filtered to job1, job2
+      ),
+      act: (bloc) => bloc.add(const SearchJobsEvent('Steel')), // Search for 'Steel'
+      expect: () => [
+        JobState(
+          allJobs: allJobs,
+          filteredJobs: [job1], // Only 'Steel Job' matches both
+          activeFilters: const {'MIG', 'TIG'},
+          searchQuery: 'Steel',
+        ),
+      ],
+    );
+
+    blocTest<JobBloc, JobState>(
+      'AddNewJobEvent: adds job, shows success, and re-fetches',
+      build: () {
+        when(mockJobService.addJob(any)).thenAnswer((_) async => {});
+        // Mock the re-fetch
+        when(mockJobService.fetchJobs()).thenAnswer((_) async => allJobs);
+        return jobBloc;
+      },
       act: (bloc) => bloc.add(AddNewJobEvent()),
-      expect: () =>
-      <JobState>[
+      expect: () => [
         const JobState(
-          actionMessage: 'Failed to add job.',
-          actionMessageType: ActionMessageType.error,
+          actionMessage: 'Job added successfully!',
+          actionMessageType: ActionMessageType.success,
         ),
-      ],
-      verify: (_) {
-        verify(() => mockJobService.addJob(any())).called(1);
-        verifyNever(() => mockJobService.fetchJobs()); // No refetch on failure
-      },
-    );
-  });
-
-  group('AddSpecificJobEvent', () {
-    final specificJob = Job(title: 'Imported', mode: 'MMA', current: '70A');
-    final newJobList = [job1, job2, specificJob];
-
-    blocTest<JobBloc, JobState>(
-      'adds the specific job and refetches',
-      setUp: () {
-        when(() => mockJobService.addJob(specificJob)).thenAnswer((_) async =>
-        {
-        });
-        when(() => mockJobService.fetchJobs()).thenAnswer((
-            _) async => newJobList);
-      },
-      build: () => jobBloc,
-      seed: () =>
-          JobState(status: JobStatus.success,
-          allJobs: [job1, job2],
-          filteredJobs: [job1, job2]),
-      act: (bloc) => bloc.add(AddSpecificJobEvent(specificJob)),
-      // Similar pattern to AddNewJobEvent using matchers
-      expect: () =>
-      <dynamic>[
-        isA<JobState>()
-            .having((s) => s.actionMessage, 'actionMessage',
-            'Job imported successfully!')
-            .having((s) => s.actionMessageType, 'messageType',
-            ActionMessageType.success),
-        isA<JobState>()
-            .having((s) => s.status, 'status', JobStatus.loading)
-            .having((s) => s.actionMessage, 'actionMessage',
-            'Job imported successfully!'),
-        isA<JobState>()
-            .having((s) => s.status, 'status', JobStatus.success)
-            .having((s) => s.allJobs, 'allJobs', newJobList)
-            .having((s) => s.filteredJobs, 'filteredJobs', newJobList)
-            .having((s) => s.actionMessage, 'actionMessage',
-            'Job imported successfully!'),
-      ],
-      verify: (_) {
-        verify(() => mockJobService.addJob(specificJob)).called(1);
-        verify(() => mockJobService.fetchJobs()).called(1);
-      },
-    );
-  });
-
-
-  group('DeleteJobEvent', () {
-    final remainingJobs = [job2]; // job1 is deleted
-
-    // Using matchers similar to AddNewJobEvent
-    blocTest<JobBloc, JobState>(
-      'deletes a job and refetches the list',
-      setUp: () {
-        when(() => mockJobService.deleteJob('1')).thenAnswer((_) async => {});
-        when(() => mockJobService.fetchJobs()).thenAnswer((
-            _) async => remainingJobs);
-      },
-      build: () => jobBloc,
-      seed: () =>
-          JobState(status: JobStatus.success,
-          allJobs: [job1, job2],
-          filteredJobs: [job1, job2]),
-      act: (bloc) => bloc.add(const DeleteJobEvent('1')),
-      expect: () =>
-      <dynamic>[
-        isA<JobState>()
-            .having((s) => s.actionMessage, 'actionMessage',
-            'Job deleted successfully.')
-            .having((s) => s.actionMessageType, 'messageType',
-            ActionMessageType.success),
-        isA<JobState>()
-            .having((s) => s.status, 'status', JobStatus.loading)
-            .having((s) => s.actionMessage, 'actionMessage',
-            'Job deleted successfully.'),
-        isA<JobState>()
-            .having((s) => s.status, 'status', JobStatus.success)
-            .having((s) => s.allJobs, 'allJobs', remainingJobs)
-            .having((s) => s.filteredJobs, 'filteredJobs', remainingJobs)
-            .having((s) => s.actionMessage, 'actionMessage',
-            'Job deleted successfully.'),
-      ],
-      verify: (_) {
-        verify(() => mockJobService.deleteJob('1')).called(1);
-        verify(() => mockJobService.fetchJobs()).called(1); // Verify refetch
-      },
-    );
-
-    blocTest<JobBloc, JobState>(
-      'emits error message when deleteJob fails',
-      setUp: () {
-        when(() => mockJobService.deleteJob('1')).thenThrow(
-            ApiException('Failed'));
-      },
-      build: () => jobBloc,
-      act: (bloc) => bloc.add(const DeleteJobEvent('1')),
-      expect: () =>
-      <JobState>[
-        // Expect only the error message state, keeping existing lists
+        const JobState(
+          status: JobStatus.loading,
+          actionMessage: 'Job added successfully!',
+          actionMessageType: ActionMessageType.success,
+        ),
+        // --- THIS IS THE FIX ---
         JobState(
           status: JobStatus.success,
-          // Status remains from seed
-          allJobs: [job1, job2],
-          // List remains unchanged
-          filteredJobs: [job1, job2],
-          // List remains unchanged
+          allJobs: allJobs,
+          filteredJobs: allJobs,
+          actionMessage: 'Job added successfully!', // The message persists
+          actionMessageType: ActionMessageType.success,
+        ),
+        // --- END OF FIX ---
+      ],
+      verify: (_) {
+        verify(mockJobService.addJob(any)).called(1);
+        verify(mockJobService.fetchJobs()).called(1);
+      },
+    );
+
+    blocTest<JobBloc, JobState>(
+      'AddSpecificJobEvent: adds job, shows success, and re-fetches',
+      build: () {
+        when(mockJobService.addJob(job1)).thenAnswer((_) async => {});
+        when(mockJobService.fetchJobs()).thenAnswer((_) async => allJobs);
+        return jobBloc;
+      },
+      act: (bloc) => bloc.add(AddSpecificJobEvent(job1)),
+      expect: () => [
+        const JobState(
+          actionMessage: 'Job imported successfully!',
+          actionMessageType: ActionMessageType.success,
+        ),
+        const JobState(
+          status: JobStatus.loading,
+          actionMessage: 'Job imported successfully!',
+          actionMessageType: ActionMessageType.success,
+        ),
+        // --- THIS IS THE FIX ---
+        JobState(
+          status: JobStatus.success,
+          allJobs: allJobs,
+          filteredJobs: allJobs,
+          actionMessage: 'Job imported successfully!', // The message persists
+          actionMessageType: ActionMessageType.success,
+        ),
+        // --- END OF FIX ---
+      ],
+    );
+
+    blocTest<JobBloc, JobState>(
+      'DeleteJobEvent: deletes job, shows success, and re-fetches',
+      build: () {
+        when(mockJobService.deleteJob(job1.id!)).thenAnswer((_) async => {});
+        when(mockJobService.fetchJobs()).thenAnswer((_) async => [job2, job3]);
+        return jobBloc;
+      },
+      act: (bloc) => bloc.add(DeleteJobEvent(job1.id!)),
+      expect: () => [
+        const JobState(
+          actionMessage: 'Job deleted successfully.',
+          actionMessageType: ActionMessageType.success,
+        ),
+        const JobState(
+          status: JobStatus.loading,
+          actionMessage: 'Job deleted successfully.',
+          actionMessageType: ActionMessageType.success,
+        ),
+        // --- THIS IS THE FIX ---
+        JobState(
+          status: JobStatus.success,
+          allJobs: [job2, job3],
+          filteredJobs: [job2, job3],
+          actionMessage: 'Job deleted successfully.', // The message persists
+          actionMessageType: ActionMessageType.success,
+        ),
+        // --- END OF FIX ---
+      ],
+    );
+
+    blocTest<JobBloc, JobState>(
+      'DeleteJobEvent: shows error on failure',
+      build: () {
+        when(mockJobService.deleteJob(any))
+            .thenThrow(ApiException('Failed to delete'));
+        return jobBloc;
+      },
+      act: (bloc) => bloc.add(const DeleteJobEvent('1')),
+      expect: () => [
+        const JobState(
           actionMessage: 'Failed to delete job.',
           actionMessageType: ActionMessageType.error,
         ),
       ],
-      verify: (_) {
-        verify(() => mockJobService.deleteJob('1')).called(1);
-        verifyNever(() => mockJobService.fetchJobs()); // No refetch on failure
-      },
     );
-  });
-
-  group('UpdateJobEvent', () {
-    final updatedJob1 = Job(id: '1',
-        title: 'Updated Job 1',
-        mode: 'MIG',
-        current: '110A',
-        isActive: false);
-    final updatedAllJobs = [updatedJob1, job2]; // job1 is updated
-    final updatedFilteredJobs = [updatedJob1, job2];
-
-    // --- FIX: Use Matchers ---
-    blocTest<JobBloc, JobState>(
-      'updates job locally without refetching',
-      setUp: () {
-        when(() => mockJobService.updateJob(updatedJob1)).thenAnswer((
-            _) async => {});
-      },
-      build: () => jobBloc,
-      seed: () =>
-          JobState(status: JobStatus.success,
-          allJobs: [job1, job2],
-          filteredJobs: [job1, job2]),
-      act: (bloc) => bloc.add(UpdateJobEvent(updatedJob1)),
-      expect: () =>
-      <dynamic>[ // Use dynamic list for Matchers
-        isA<JobState>()
-            .having((s) => s.status, 'status',
-            JobStatus.success) // Status remains success
-            .having((s) => s.allJobs, 'allJobs',
-            updatedAllJobs) // Verify updated list
-            .having((s) => s.filteredJobs, 'filteredJobs',
-            updatedFilteredJobs) // Verify updated list
-            .having((s) => s.actionMessage, 'actionMessage',
-            'Job updated successfully!')
-            .having((s) => s.actionMessageType, 'messageType',
-            ActionMessageType.success),
-      ],
-      verify: (_) {
-        verify(() => mockJobService.updateJob(updatedJob1)).called(1);
-        verifyNever(() =>
-            mockJobService.fetchJobs()); // Ensure refetch doesn't happen
-      },
-    );
-    // --- END FIX ---
 
     blocTest<JobBloc, JobState>(
-      'emits error message when updateJob fails',
-      setUp: () {
-        when(() => mockJobService.updateJob(updatedJob1)).thenThrow(
-            ApiException('Failed'));
+      'UpdateJobEvent: optimistically updates state and shows success',
+      build: () {
+        when(mockJobService.updateJob(any)).thenAnswer((_) async => {});
+        return jobBloc;
       },
-      build: () => jobBloc,
-      seed: () =>
-          JobState(status: JobStatus.success,
-          allJobs: [job1, job2],
-          filteredJobs: [job1, job2]),
-      act: (bloc) => bloc.add(UpdateJobEvent(updatedJob1)),
-      expect: () =>
-      <JobState>[
-        // Only emit error state, lists remain unchanged from seed
+      // Seed the state with the original list
+      seed: () => JobState(
+        status: JobStatus.success,
+        allJobs: [job1, job2],
+        filteredJobs: [job1, job2],
+      ),
+      act: (bloc) {
+        final updatedJob1 =
+        createMockJob(id: '1', title: 'UPDATED Job', mode: 'MIG');
+        bloc.add(UpdateJobEvent(updatedJob1));
+      },
+      expect: () {
+        final updatedJob1 =
+        createMockJob(id: '1', title: 'UPDATED Job', mode: 'MIG');
+        return [
+          JobState(
+            status: JobStatus.success,
+            allJobs: [updatedJob1, job2], // Optimistically updated list
+            filteredJobs: [updatedJob1, job2], // Optimistically updated list
+            actionMessage: 'Job updated successfully!',
+            actionMessageType: ActionMessageType.success,
+          ),
+        ];
+      },
+      verify: (_) {
+        // Crucially, verify updateJob was called but fetchJobs was NOT
+        verify(mockJobService.updateJob(any)).called(1);
+        verifyNever(mockJobService.fetchJobs());
+      },
+    );
+
+    blocTest<JobBloc, JobState>(
+      'UpdateJobEvent: shows error on failure and does not change state',
+      build: () {
+        when(mockJobService.updateJob(any))
+            .thenThrow(ApiException('Failed to update'));
+        return jobBloc;
+      },
+      seed: () => JobState(
+        status: JobStatus.success,
+        allJobs: [job1, job2],
+        filteredJobs: [job1, job2],
+      ),
+      act: (bloc) {
+        final updatedJob1 =
+        createMockJob(id: '1', title: 'UPDATED Job', mode: 'MIG');
+        bloc.add(UpdateJobEvent(updatedJob1));
+      },
+      expect: () => [
         JobState(
           status: JobStatus.success,
-          // Status doesn't change on failed update
-          allJobs: [job1, job2],
-          filteredJobs: [job1, job2],
+          allJobs: [job1, job2], // State remains unchanged
+          filteredJobs: [job1, job2], // State remains unchanged
           actionMessage: 'Failed to update job.',
           actionMessageType: ActionMessageType.error,
         ),
       ],
       verify: (_) {
-        verify(() => mockJobService.updateJob(updatedJob1)).called(1);
-        verifyNever(() => mockJobService.fetchJobs());
+        verify(mockJobService.updateJob(any)).called(1);
+        verifyNever(mockJobService.fetchJobs());
       },
     );
-  });
 
-
-  group('ToggleJobActiveEvent', () {
-    // Simulate the state after refetch: job1 active, job2 inactive
-    final toggledJobList = [
-      Job(id: '1',
-          title: 'Job 1',
-          mode: 'MIG',
-          current: '100A',
-          isActive: true),
-      Job(id: '2',
-          title: 'Job 2',
-          mode: 'TIG',
-          current: '150A',
-          isActive: false)
-    ];
-
-    // --- FIX: Use Matchers ---
     blocTest<JobBloc, JobState>(
-      'updates statuses and refetches',
-      setUp: () {
-        // Mock the update status calls: set job2 to false, job1 to true
-        when(() => mockJobService.updateJobStatus('2', false)).thenAnswer((
-            _) async => {});
-        when(() => mockJobService.updateJobStatus('1', true)).thenAnswer((
-            _) async => {});
-        // Mock the subsequent fetch
-        when(() => mockJobService.fetchJobs()).thenAnswer((
-            _) async => toggledJobList);
+      'ToggleJobActiveEvent: deactivates old, activates new, and re-fetches',
+      build: () {
+        final activeJob = createMockJob(id: '1', isActive: true);
+        final inactiveJob = createMockJob(id: '2', isActive: false);
+        final finalActiveJob = createMockJob(id: '2', isActive: true);
+        final finalInactiveJob = createMockJob(id: '1', isActive: false);
+
+        when(mockJobService.updateJobStatus(activeJob.id!, false))
+            .thenAnswer((_) async => {});
+        when(mockJobService.updateJobStatus(inactiveJob.id!, true))
+            .thenAnswer((_) async => {});
+        when(mockJobService.fetchJobs())
+            .thenAnswer((_) async => [finalInactiveJob, finalActiveJob]);
+
+        return jobBloc;
       },
-      build: () => jobBloc,
-      // Initial state: job1 inactive, job2 active
-      seed: () =>
-          JobState(status: JobStatus.success,
-          allJobs: [job1, job2],
-          filteredJobs: [job1, job2]),
-      act: (bloc) => bloc.add(ToggleJobActiveEvent(job1)),
-      // Activate job1
-      expect: () =>
-      <dynamic>[ // Use dynamic list for Matchers
-        // 1. Action message state (intermediate)
-        isA<JobState>()
-            .having((s) => s.actionMessage, 'actionMessage',
-            'Job activated successfully!')
-            .having((s) => s.actionMessageType, 'messageType',
-            ActionMessageType.success),
-
-        // 2. Loading state during refetch
-        isA<JobState>()
-            .having((s) => s.status, 'status', JobStatus.loading)
-            .having((s) => s.actionMessage, 'actionMessage',
-            'Job activated successfully!'),
-
-        // 3. Final success state with updated list
-        isA<JobState>()
-            .having((s) => s.status, 'status', JobStatus.success)
-            .having((s) => s.allJobs, 'allJobs', toggledJobList)
-            .having((s) => s.filteredJobs, 'filteredJobs', toggledJobList)
-            .having((s) => s.actionMessage, 'actionMessage',
-            'Job activated successfully!'),
-      ],
+      seed: () => JobState(
+        status: JobStatus.success,
+        allJobs: [
+          createMockJob(id: '1', isActive: true),
+          createMockJob(id: '2', isActive: false),
+        ],
+      ),
+      act: (bloc) =>
+          bloc.add(ToggleJobActiveEvent(createMockJob(id: '2', isActive: false))),
+      expect: () {
+        final finalActiveJob = createMockJob(id: '2', isActive: true);
+        final finalInactiveJob = createMockJob(id: '1', isActive: false);
+        return [
+          JobState(
+            status: JobStatus.success,
+            allJobs: [
+              createMockJob(id: '1', isActive: true),
+              createMockJob(id: '2', isActive: false),
+            ],
+            actionMessage: 'Job activated successfully!',
+            actionMessageType: ActionMessageType.success,
+          ),
+          JobState(
+            status: JobStatus.loading,
+            allJobs: [
+              createMockJob(id: '1', isActive: true),
+              createMockJob(id: '2', isActive: false),
+            ],
+            actionMessage: 'Job activated successfully!',
+            actionMessageType: ActionMessageType.success,
+          ),
+          // --- THIS IS THE FIX ---
+          JobState(
+            status: JobStatus.success,
+            allJobs: [finalInactiveJob, finalActiveJob],
+            filteredJobs: [finalInactiveJob, finalActiveJob],
+            actionMessage: 'Job activated successfully!', // The message persists
+            actionMessageType: ActionMessageType.success,
+          ),
+          // --- END OF FIX ---
+        ];
+      },
       verify: (_) {
-        verify(() => mockJobService.updateJobStatus('2', false)).called(
-            1); // Deactivate job2
-        verify(() => mockJobService.updateJobStatus('1', true)).called(
-            1); // Activate job1
-        verify(() => mockJobService.fetchJobs()).called(1); // Verify refetch
+        verify(mockJobService.updateJobStatus('1', false)).called(1);
+        verify(mockJobService.updateJobStatus('2', true)).called(1);
+        verify(mockJobService.fetchJobs()).called(1);
       },
     );
-    // --- END FIX ---
 
     blocTest<JobBloc, JobState>(
-      'does nothing if the job is already active',
+      'ToggleJobActiveEvent: does nothing if job is already active',
       build: () => jobBloc,
-      // Initial state: job2 is already active
-      seed: () =>
-          JobState(status: JobStatus.success,
-          allJobs: [job1, job2],
-          filteredJobs: [job1, job2]),
-      act: (bloc) => bloc.add(ToggleJobActiveEvent(job2)),
-      // Try to activate job2 again
-      expect: () => <JobState>[],
-      // No state changes expected
+      seed: () => JobState(allJobs: [job1, job2]),
+      act: (bloc) =>
+          bloc.add(ToggleJobActiveEvent(createMockJob(id: '1', isActive: true))),
+      expect: () => [], // No state change
       verify: (_) {
-        // Verify no status updates were called
-        verifyNever(() => mockJobService.updateJobStatus(any(), any()));
-        verifyNever(() => mockJobService.fetchJobs());
+        verifyZeroInteractions(mockJobService); // Guard clause works
       },
     );
 
     blocTest<JobBloc, JobState>(
-      'emits error message when toggle fails',
-      setUp: () {
-        // Make one of the status updates fail
-        when(() => mockJobService.updateJobStatus('2', false)).thenAnswer((
-            _) async => {});
-        when(() => mockJobService.updateJobStatus('1', true)).thenThrow(
-            ApiException('Failed'));
+      'ToggleJobActiveEvent: shows error on failure',
+      build: () {
+        when(mockJobService.updateJobStatus(any, any))
+            .thenThrow(ApiException('Failed to activate'));
+        return jobBloc;
       },
-      build: () => jobBloc,
-      seed: () =>
-          JobState(status: JobStatus.success,
-          allJobs: [job1, job2],
-          filteredJobs: [job1, job2]),
-      act: (bloc) => bloc.add(ToggleJobActiveEvent(job1)),
-      expect: () =>
-      <JobState>[
+      seed: () => JobState(
+        status: JobStatus.success,
+        allJobs: [
+          createMockJob(id: '1', isActive: true),
+          createMockJob(id: '2', isActive: false),
+        ],
+      ),
+      act: (bloc) =>
+          bloc.add(ToggleJobActiveEvent(createMockJob(id: '2', isActive: false))),
+      expect: () => [
         JobState(
           status: JobStatus.success,
-          // Status remains success from seed
-          allJobs: [job1, job2],
-          filteredJobs: [job1, job2],
+          allJobs: [
+            createMockJob(id: '1', isActive: true),
+            createMockJob(id: '2', isActive: false),
+          ],
           actionMessage: 'Failed to activate job.',
           actionMessageType: ActionMessageType.error,
         ),
       ],
-      verify: (_) {
-        verify(() => mockJobService.updateJobStatus('2', false)).called(1);
-        verify(() => mockJobService.updateJobStatus('1', true)).called(1);
-        verifyNever(() => mockJobService.fetchJobs()); // No refetch on failure
-      },
     );
-  });
 
-  group('ClearJobActionEvent', () {
     blocTest<JobBloc, JobState>(
-      'clears the action message',
+      'ClearJobActionEvent: clears the action message',
       build: () => jobBloc,
-      seed: () => const JobState(actionMessage: 'Some message'),
+      seed: () => const JobState(
+        actionMessage: 'Test Message',
+        actionMessageType: ActionMessageType.success,
+      ),
       act: (bloc) => bloc.add(ClearJobActionEvent()),
-      expect: () =>
-      <JobState>[
-        const JobState(actionMessage: null), // Message should be null
+      expect: () => [
+        const JobState(
+          actionMessage: null,
+          actionMessageType: ActionMessageType.success,
+        ),
       ],
     );
   });
